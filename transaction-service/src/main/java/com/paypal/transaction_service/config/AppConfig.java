@@ -6,6 +6,9 @@ import org.springframework.web.client.RestTemplate;
 
 @Configuration
 public class AppConfig {
+    /*
+    This app config class gives a Bean which helps to call rest microservices internally
+     */
     @Bean
     public RestTemplate restTemplate(){
         return new RestTemplate();

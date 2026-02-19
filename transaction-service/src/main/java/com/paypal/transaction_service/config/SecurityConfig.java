@@ -12,11 +12,13 @@ public class SecurityConfig {
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity httpSecurity)throws Exception{
         httpSecurity.csrf((csrf)->csrf.disable())
-                .authorizeHttpRequests((auth)->auth.requestMatchers("/api/transactions/**").permitAll()
+                .authorizeHttpRequests((auth)->
+                        auth.requestMatchers("/api/transactions/**").permitAll()
                         .anyRequest().authenticated());
 
         return httpSecurity.build();
     }
+    //Using Bcrypt here: Purpose is to encode the password or to store the password securely
     @Bean
     public PasswordEncoder passwordEncoder(){
         return new BCryptPasswordEncoder();
