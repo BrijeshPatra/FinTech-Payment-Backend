@@ -8,6 +8,9 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
+import java.time.LocalDateTime;
+import java.util.List;
+
 @Service
 public class RewardServiceImpl implements RewardService{
 
@@ -43,5 +46,18 @@ public class RewardServiceImpl implements RewardService{
         repository.save(reward);
 
         log.info("Reward created successfully for transaction id = {} with points={}",event.getTransactionId(),calcReward);
+    }
+
+    //send the reward
+
+    @Override
+    public Reward sendReward(Reward reward) {
+        reward.setDeleveredAt(LocalDateTime.now());
+        return repository.save(reward);
+    }
+
+    @Override
+    public List<Reward> getRewardsById(Long userId) {
+        return repository.findByUserId(userId);
     }
 }
