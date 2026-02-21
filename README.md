@@ -1,4 +1,4 @@
-﻿# FinTech-Payment-Backend
+# User Service + Spring Security + JWT
 
 This document captures **all notes, decisions, and implementations done so far**, written in a way that also works as a **README**. Tomorrow, we will extend this with **DTOs and mapping**.
 
@@ -333,20 +333,99 @@ Key Patterns Used
 
 * Global Logging: Structured SLF4J logging for JWT filters and Kafka listeners.
 
+### ✅ Reward Service + Kafka Listener: Event Consumed by KafkaListener (COMPLETED)
+
+The Reward Service is fully event-driven and consumes transaction events published by the Transaction Service via Kafka.
+
+#### 🔄 Event Consumption
+
+Topic: txn-initiated
+
+Consumer Group: reward-group
+
+Listener: @KafkaListener
+
+Auto Offset Reset: earliest
+
+JSON Deserialization using Spring Kafka JsonDeserializer
+
+The service listens for transaction events and processes only SUCCESS transactions.
+
+#### 🎯 Reward Processing Logic
+
+When a transaction event is received:
+
+Validate transaction status (SUCCESS only).
+
+Perform idempotency check using transactionId.
+
+Calculate reward points (percentage-based logic).
+
+Persist reward record in database.
+
+Log structured success/failure events.
+
+#### 🛡 Idempotency Handling (At-Least-Once Safe)
+
+Kafka guarantees at-least-once delivery, meaning events may be redelivered.
+
+To prevent duplicate rewards:
+
+Application-level check:
+
+existsByTransactionId(transactionId)
+
+Database-level protection:
+
+@Column(unique = true) on transaction_id
+
+Unique constraint at table level
+
+This implements the Idempotent Consumer Pattern, ensuring safe retry handling.
+
+Logging via LoggerFactory(Slf4j)
+
+Database indexing for performance (user_id, transaction_id)
+
+🔐 Separation of Concerns
+Layer	Responsibility
+Kafka Listener	Event consumption only
+Service Layer	Business logic (reward calculation + idempotency)
+Repository	Persistence operations
+Entity	Database mapping
+Controller Layer: Exposed simple endpoints
+
+No business logic inside Kafka listener.
+
+#### 📊 Reward Calculation Strategy
+
+Current implementation:
+
+Percentage-based reward (e.g., 2% of transaction amount)
+
+Designed to be easily extendable to:
+
+Tier-based rewards
+
+Campaign-based bonuses
+
+Dynamic rule engine
+
+Configurable reward slabs
+
+
 ### 📌 Current Status
 
 * User Service: ✅ Complete
 * JWT + DTO: ✅ Complete
 * Transaction Service: Complete
 * Notification Service: Complete
+* Reward service design
+* Idempotency protection: ✅ Complete
 
 ---
 
 Next planned:
-
-* Reward service design
 * Wallet balance consistency
 * Idempotent transactions
 * Failure & rollback strategies
-
-
