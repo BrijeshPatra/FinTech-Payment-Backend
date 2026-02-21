@@ -11,7 +11,7 @@
 
 
     <modules>
-        <module>user-service/user-service</module>
+        <module>user-service</module>
         <module>transaction-service</module>
         <module>notification-service</module>
     </modules>
