@@ -252,14 +252,6 @@ This will make the API:
 
 ---
 
-## Final Note
-
-Everything done so far follows **industry best practices** and mirrors how real fintech backends are built.
-
-Tomorrow we level it up with **DTOs and clean API contracts** 🚀
-
----
-
 ## ✅ JWT + DTO IMPLEMENTATION (COMPLETED)
 
 ### 🔐 Authentication Flow
@@ -429,3 +421,4 @@ Next planned:
 * Wallet balance consistency
 * Idempotent transactions
 * Failure & rollback strategies
+
