@@ -12,6 +12,12 @@ public class Notification {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
+    private String userId;
+
+    private String message;
+
+    private LocalDateTime deliveredAt;
+
     public Long getId() {
         return id;
     }
@@ -51,12 +57,6 @@ public class Notification {
     public void setNotificationStatus(NotificationStatus notificationStatus) {
         this.notificationStatus = notificationStatus;
     }
-
-    private String userId;
-
-    private String message;
-
-    private LocalDateTime deliveredAt;
 
     @Enumerated(EnumType.STRING)
     private NotificationStatus notificationStatus;
