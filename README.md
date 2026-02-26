@@ -405,6 +405,66 @@ Dynamic rule engine
 
 Configurable reward slabs
 
+## ✅ API Gateway (COMPLETED)
+
+The API Gateway is fully implemented and serves as the single entry point for all backend services.
+
+### 🚪 Gateway Responsibilities
+
+- Centralized routing to all microservices:
+  - `/auth/**` → User Service
+  - `/api/transactions/**` → Transaction Service
+  - `/api/rewards/**` → Reward Service
+  - `/api/notifications/**` → Notification Service
+
+- JWT validation at gateway level
+- Stateless request forwarding
+- Reactive architecture using Spring Cloud Gateway
+- Centralized cross-cutting concerns (authentication, logging, filters)
+
+---
+
+### 🔐 Security at Gateway
+
+- Custom JWT validation filter implemented
+- Extracts token from: Authorization: Bearer <token>
+- Validates token using shared `JwtUtil`
+- Rejects unauthorized requests before reaching services
+- No session usage (fully stateless)
+
+---
+
+### ⚙️ Architecture Decisions
+
+- Reactive (WebFlux-based)
+- No business logic in gateway
+- No database interaction
+- Pure routing + security enforcement
+- Microservices remain independently deployable
+
+---
+
+### 🧠 Design Principles Followed
+
+| Layer        | Responsibility              |
+|-------------|-----------------------------|
+| Gateway     | Routing + Security Enforcement |
+| Microservices | Business Logic |
+| Kafka       | Event Communication |
+| Database    | Persistence |
+| JWT         | Stateless Authentication |
+
+---
+
+### 📊 Current Status
+
+- User Service: ✅ Complete  
+- JWT + DTO: ✅ Complete  
+- Transaction Service: Complete  
+- Notification Service: Complete  
+- Reward service design  
+- Idempotency protection: ✅ Complete  
+- API Gateway: ✅ Complete  
 
 ### 📌 Current Status
 
@@ -418,6 +478,7 @@ Configurable reward slabs
 ---
 
 Next planned:
+* Wallet Service
 * Wallet balance consistency
 * Idempotent transactions
 * Failure & rollback strategies
