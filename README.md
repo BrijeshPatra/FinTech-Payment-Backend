@@ -405,6 +405,66 @@ Dynamic rule engine
 
 Configurable reward slabs
 
+## ✅ API Gateway (COMPLETED)
+
+The API Gateway is fully implemented and serves as the single entry point for all backend services.
+
+### 🚪 Gateway Responsibilities
+
+- Centralized routing to all microservices:
+  - `/auth/**` → User Service
+  - `/api/transactions/**` → Transaction Service
+  - `/api/rewards/**` → Reward Service
+  - `/api/notifications/**` → Notification Service
+
+- JWT validation at gateway level
+- Stateless request forwarding
+- Reactive architecture using Spring Cloud Gateway
+- Centralized cross-cutting concerns (authentication, logging, filters)
+
+---
+
+### 🔐 Security at Gateway
+
+- Custom JWT validation filter implemented
+- Extracts token from: Authorization: Bearer <token>
+- Validates token using shared `JwtUtil`
+- Rejects unauthorized requests before reaching services
+- No session usage (fully stateless)
+
+---
+
+### ⚙️ Architecture Decisions
+
+- Reactive (WebFlux-based)
+- No business logic in gateway
+- No database interaction
+- Pure routing + security enforcement
+- Microservices remain independently deployable
+
+---
+
+### 🧠 Design Principles Followed
+
+| Layer        | Responsibility              |
+|-------------|-----------------------------|
+| Gateway     | Routing + Security Enforcement |
+| Microservices | Business Logic |
+| Kafka       | Event Communication |
+| Database    | Persistence |
+| JWT         | Stateless Authentication |
+
+---
+
+### 📊 Current Status
+
+- User Service: ✅ Complete  
+- JWT + DTO: ✅ Complete  
+- Transaction Service: Complete  
+- Notification Service: Complete  
+- Reward service design  
+- Idempotency protection: ✅ Complete  
+- API Gateway: ✅ Complete  
 
 ### 📌 Current Status
 
@@ -415,10 +475,261 @@ Configurable reward slabs
 * Reward service design
 * Idempotency protection: ✅ Complete
 
+# ✅ Wallet Service (COMPLETED)
+
+The Wallet Service is responsible for maintaining **user wallet balances**, handling **debits, credits, holds, captures, and releases** with strong consistency guarantees.
+
+It is designed using **banking-grade concurrency control** and **idempotent financial operations**.
+
 ---
 
-Next planned:
-* Wallet balance consistency
-* Idempotent transactions
-* Failure & rollback strategies
+## 🏗 Core Responsibilities
+
+- Wallet creation per user
+- Credit / Debit operations
+- Temporary fund holds
+- Capture of held funds
+- Automatic hold expiry via scheduler
+- Concurrency-safe balance updates
+- Exception handling for insufficient funds and invalid operations
+
+---
+
+## 🔐 Concurrency Control – Pessimistic Locking
+
+To prevent race conditions during concurrent balance updates:
+
+- Implemented **Pessimistic Locking**
+- Used `@Lock(LockModeType.PESSIMISTIC_WRITE)`
+- Ensures only one transaction modifies wallet balance at a time
+
+### Guarantees
+
+- No double spending
+- No negative balance due to race conditions
+- Strong transactional consistency
+
+This mirrors real-world fintech wallet systems.
+
+---
+
+## 💰 Wallet Operations Implemented
+
+### 1️⃣ Create Wallet
+
+- Initializes wallet for user
+- Sets initial balance to zero
+- Enforces unique wallet per user
+
+---
+
+### 2️⃣ Credit Wallet
+
+- Adds amount to available balance
+- Fully transactional
+- Uses pessimistic locking
+
+---
+
+### 3️⃣ Debit Wallet
+
+- Validates sufficient balance
+- Deducts from available balance
+- Throws `InsufficientFundException` if invalid
+
+---
+
+### 4️⃣ Hold Funds
+
+- Deducts amount from available balance
+- Moves amount to "held" state
+- Generates unique `holdReference`
+- Sets expiration timestamp
+- Fully idempotent and transactional
+
+#### Used for:
+- Payment authorization
+- Reserve-before-capture workflows
+
+---
+
+### 5️⃣ Capture Hold
+
+- Converts held amount into finalized debit
+- Updates wallet state accordingly
+- Ensures hold exists and is active
+
+---
+
+### 6️⃣ Release Hold
+
+- Returns held amount back to available balance
+- Used when payment fails or expires
+
+---
+
+## ⏳ Hold Expiry Scheduler
+
+Implemented scheduled cleanup mechanism:
+
+- `@Scheduled` job scans expired holds
+- Automatically releases expired holds
+- Reuses existing release logic
+- Logs success/failure without blocking execution
+
+### Design Considerations
+
+- Does not crash on single failure
+- Continues processing remaining holds
+- Safe for production workloads
+
+---
+
+## 🛡 Exception Handling
+
+Custom exceptions implemented:
+
+- `InsufficientFundException`
+- `NotFoundException`
+
+### Global Handling Strategy
+
+- Clear error messages
+- Proper HTTP status codes
+- No internal exception leakage
+
+---
+
+## 🔁 Idempotency Strategy
+
+To prevent duplicate financial operations:
+
+- Unique `holdReference`
+- Database constraints
+- Validation before mutation
+- Transactional boundaries
+
+### Ensures
+
+- Safe retries
+- At-least-once safe processing
+- Financial correctness
+
+---
+
+## 🧠 Architecture Design
+
+| Layer       | Responsibility                  |
+|------------|----------------------------------|
+| Controller | Request handling only            |
+| Service    | Business logic & locking         |
+| Repository | DB access + locking              |
+| Entity     | DB mapping                       |
+| Scheduler  | Expiry cleanup                   |
+
+- No business logic inside controllers.
+- All balance mutations are transactional.
+
+---
+
+## 📊 Data Integrity Guarantees
+
+- ✔ Atomic balance updates  
+- ✔ Concurrency-safe operations  
+- ✔ Hold-expiry auto recovery  
+- ✔ Clear separation of available vs held balance  
+- ✔ Strong financial correctness  
+
+---
+
+## 📌 Current Status (Updated)
+
+- User Service: ✅ Complete  
+- JWT + DTO: ✅ Complete  
+- Transaction Service: ✅ Complete  
+- Notification Service: ✅ Complete  
+- Reward Service: ✅ Complete  
+- Idempotency protection: ✅ Complete  
+- API Gateway: ✅ Complete  
+- Wallet Service: ✅ Complete  
+- Pessimistic Locking: ✅ Implemented  
+- Hold & Capture Flow: ✅ Implemented  
+- Scheduler for Expiry: ✅ Implemented  
+- Exception Handling: ✅ Implemented
+
+---
+
+# 🏁 Project Conclusion
+
+This project represents a **distributed fintech-style payment backend system** built using a microservices architecture.
+
+The system includes:
+
+- ✅ User Service (Authentication & JWT)
+- ✅ Wallet Service (Balance, Hold, Capture, Concurrency Control)
+- ✅ Transaction Service
+- ✅ Notification Service
+- ✅ Reward Service
+- ✅ API Gateway (Routing & Centralized Entry Point)
+- ✅ Idempotency Protection
+- ✅ Scheduled Hold Expiry Handling
+- ✅ Exception Handling & Validation
+- ✅ Pessimistic Locking for Financial Safety
+
+---
+
+## 🏗 Architecture Summary
+
+- Built using **Spring Boot Microservices**
+- API Gateway using **Spring Cloud Gateway**
+- Database integration with **JPA/Hibernate**
+- Secure authentication using **JWT**
+- Concurrency-safe financial operations
+- Modular and scalable service design
+- Clean layered architecture (Controller → Service → Repository → Entity)
+
+---
+
+## 🔐 Financial Safety Highlights
+
+- Atomic wallet balance updates  
+- Concurrency protection using pessimistic locking  
+- Hold–Capture–Release payment workflow  
+- Idempotent operations to prevent duplicate processing  
+- Scheduled recovery for expired holds  
+
+This ensures the system behaves similarly to real-world digital wallet and payment processing platforms.
+
+---
+
+## 🚀 Learning & Engineering Outcomes
+
+Through this project:
+
+- Implemented real-world fintech patterns
+- Designed distributed system communication
+- Handled transactional consistency challenges
+- Applied concurrency control in financial operations
+- Built scalable microservice architecture
+
+---
+
+## 📌 Final Note
+
+This backend system is structured to serve as a **strong foundation for a production-grade fintech/payment platform like paypal**.  
+
+It demonstrates practical implementation of:
+
+- Microservices architecture  
+- Secure authentication  
+- Distributed routing  
+- Financial transaction handling  
+- Concurrency management  
+
+The system is modular, extensible, and ready for further enhancements such as service discovery, centralized logging, monitoring, and deployment automation.
+
+---
+
+**Project Status: ✅ Completed**
+
 
