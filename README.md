@@ -456,25 +456,6 @@ The API Gateway is fully implemented and serves as the single entry point for al
 
 ---
 
-### 📊 Current Status
-
-- User Service: ✅ Complete  
-- JWT + DTO: ✅ Complete  
-- Transaction Service: Complete  
-- Notification Service: Complete  
-- Reward service design  
-- Idempotency protection: ✅ Complete  
-- API Gateway: ✅ Complete  
-
-### 📌 Current Status
-
-* User Service: ✅ Complete
-* JWT + DTO: ✅ Complete
-* Transaction Service: Complete
-* Notification Service: Complete
-* Reward service design
-* Idempotency protection: ✅ Complete
-
 # ✅ Wallet Service (COMPLETED)
 
 The Wallet Service is responsible for maintaining **user wallet balances**, handling **debits, credits, holds, captures, and releases** with strong consistency guarantees.
@@ -642,23 +623,6 @@ To prevent duplicate financial operations:
 
 ---
 
-## 📌 Current Status (Updated)
-
-- User Service: ✅ Complete  
-- JWT + DTO: ✅ Complete  
-- Transaction Service: ✅ Complete  
-- Notification Service: ✅ Complete  
-- Reward Service: ✅ Complete  
-- Idempotency protection: ✅ Complete  
-- API Gateway: ✅ Complete  
-- Wallet Service: ✅ Complete  
-- Pessimistic Locking: ✅ Implemented  
-- Hold & Capture Flow: ✅ Implemented  
-- Scheduler for Expiry: ✅ Implemented  
-- Exception Handling: ✅ Implemented
-
----
-
 # 🏁 Project Conclusion
 
 This project represents a **distributed fintech-style payment backend system** built using a microservices architecture.
@@ -731,5 +695,6 @@ The system is modular, extensible, and ready for further enhancements such as se
 ---
 
 **Project Status: ✅ Completed**
+
 
 
