@@ -1,4 +1,4 @@
-# User Service + Spring Security + JWT
+# Fintech Payment System
 
 This document captures **all notes, decisions, and implementations done so far**, written in a way that also works as a **README**. Tomorrow, we will extend this with **DTOs and mapping**.
 
