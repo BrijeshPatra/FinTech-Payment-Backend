@@ -1,700 +1,282 @@
-# Fintech Payment System
+# 💳 FinTech Payment Backend
 
-This document captures **all notes, decisions, and implementations done so far**, written in a way that also works as a **README**. Tomorrow, we will extend this with **DTOs and mapping**.
+A **production-grade, distributed fintech payment backend** built with Spring Boot Microservices — inspired by real-world systems like PayPal and Stripe.
 
----
-
-## 1. Project Overview
-
-This is a **Spring Boot User Service** designed in an **industry-standard, RESTful way**, with:
-
-* Clean controller–service–repository layering
-* Proper HTTP method usage
-* Spring Security integration
-* JWT-based authentication (stateless)
-
-The goal is to build something **production-realistic** (PayPal/Stripe-style backend).
+![Java](https://img.shields.io/badge/Java-17-orange?style=flat&logo=java)
+![Spring Boot](https://img.shields.io/badge/Spring%20Boot-3.x-brightgreen?style=flat&logo=springboot)
+![Apache Kafka](https://img.shields.io/badge/Apache%20Kafka-7.5-black?style=flat&logo=apachekafka)
+![Docker](https://img.shields.io/badge/Docker-Compose-blue?style=flat&logo=docker)
+![H2](https://img.shields.io/badge/Database-H2-lightblue?style=flat)
+![JWT](https://img.shields.io/badge/Auth-JWT-yellow?style=flat&logo=jsonwebtokens)
+![Status](https://img.shields.io/badge/Status-Completed-success?style=flat)
 
 ---
 
-## 2. REST API Design (Industry Standard)
+## 📋 Table of Contents
 
-Base path:
-
-```
-/users
-```
-
-| Operation      | HTTP Method | Endpoint    |
-| -------------- | ----------- | ----------- |
-| Create user    | POST        | /users      |
-| Get all users  | GET         | /users      |
-| Get user by ID | GET         | /users/{id} |
-
-### Key REST Rules Followed
-
-* GET → read-only (no request body)
-* POST → create resources
-* Path variables used for IDs
-* Plural resource naming (`/users`)
+- [Overview](#-overview)
+- [Architecture](#-architecture)
+- [Services](#-services)
+- [Tech Stack](#-tech-stack)
+- [Getting Started](#-getting-started)
+- [API Reference](#-api-reference)
+- [Key Design Patterns](#-key-design-patterns)
+- [Project Structure](#-project-structure)
 
 ---
 
-## 3. Controller Layer Decisions
+## 🌐 Overview
 
-### ✅ Correct Patterns Used
+This system implements a **microservices-based payment platform** with:
 
-* Controller depends on **Service Interface**, not implementation
-* Uses `ResponseEntity` for proper HTTP status handling
-* Returns `404 Not Found` when user does not exist
-
-### Example (Get User by ID)
-
-```java
-@GetMapping("/{id}")
-public ResponseEntity<User> getUserById(@PathVariable Long id) {
-    return userService.getUserById(id)
-            .map(ResponseEntity::ok)
-            .orElse(ResponseEntity.notFound().build());
-}
-```
+- Stateless JWT authentication
+- Event-driven communication via Kafka
+- Pessimistic locking for financial safety
+- Idempotency protection across all services
+- Centralized routing via API Gateway
+- Docker Compose for single-command deployment
 
 ---
 
-## 4. Service Layer
-
-### Key Points
-
-* Business logic lives here
-* Repository access abstracted behind service
-* Returns Optional for safe null handling
-
-### Constructor Injection
-
-```java
-public UserServiceImpl(UserRepository userRepository) {
-    this.userRepository = userRepository;
-}
-```
-
-Why:
-
-* Loose coupling
-* Testable
-* Recommended by Spring
-
----
-
-## 5. Spring Security – Initial Behavior
-
-### What Happened
-
-After adding:
-
-```xml
-spring-boot-starter-security
-```
-
-All endpoints returned:
+## 🏗 Architecture
 
 ```
-401 Unauthorized
-```
-
-### Why (Important)
-
-* Spring Security secures **all endpoints by default**
-* Requires authentication unless configured otherwise
-
-This is **expected behavior**, not a bug.
-
----
-
-## 6. CSRF – Why It Was Disabled
-
-### What CSRF Protects Against
-
-* CSRF attacks exploit **browser cookies + sessions**
-
-### Why Disabled Here
-
-This project is a:
-
-* Stateless REST API
-* Uses JWT (Bearer tokens)
-* No cookies involved
-
-➡ CSRF protection is **not needed**
-
-```java
-http.csrf(csrf -> csrf.disable());
-```
-
-Rule to remember:
-
-> CSRF is needed only for cookie-based authentication
-
----
-
-## 7. JWT Authentication Flow
-
-### Authentication Model
-
-* Stateless
-* Token-based (JWT)
-* Token sent via `Authorization` header
-
-```
-Authorization: Bearer <jwt-token>
+                        ┌─────────────────┐
+         HTTP :8080     │   API Gateway   │   JWT Validation
+  Client ──────────────▶│  (Spring Cloud) │   Centralized Routing
+                        └────────┬────────┘
+                                 │
+              ┌──────────────────┼────────────────────┐
+              │                  │                    │
+              ▼                  ▼                    ▼
+      ┌──────────────┐  ┌──────────────┐   ┌──────────────────┐
+      │ user-service │  │  transaction │   │  wallet-service  │
+      │   :8081      │  │  service     │   │     :8090        │
+      │  JWT + Auth  │  │   :8082      │   │ Pessimistic Lock │
+      └──────────────┘  └──────┬───────┘   └──────────────────┘
+                               │
+                               │ Kafka (txn-initiated)
+                               ▼
+                    ┌──────────────────────┐
+                    │     Apache Kafka     │
+                    │    + Zookeeper       │
+                    └──────┬───────────────┘
+                           │
+              ┌────────────┴────────────┐
+              ▼                         ▼
+   ┌─────────────────────┐   ┌──────────────────┐
+   │ notification-service│   │  reward-service  │
+   │      :8084          │   │     :8085        │
+   │  Kafka Consumer     │   │  Kafka Consumer  │
+   └─────────────────────┘   └──────────────────┘
 ```
 
 ---
 
-## 8. JwtRequestFilter – Purpose
+## 📦 Services
 
-`JwtRequestFilter` extends `OncePerRequestFilter` and:
-
-1. Runs once per request
-2. Extracts JWT from header
-3. Validates token
-4. Extracts username and role
-5. Sets authentication in `SecurityContextHolder`
-6. Allows request to reach controller
-
----
-
-## 9. Common Mistakes Fixed
-
-### ❌ Missing `filterChain.doFilter()`
-
-* Caused requests to never reach controller
-
-### ❌ Duplicate endpoint mappings
-
-* Same `@GetMapping("/{id}")` twice → ambiguous mapping error
-
-### ❌ GET with RequestBody
-
-* Violates REST + HTTP spec
-
-### ❌ Casting List<User> to User
-
-* Fixed by returning `ResponseEntity<List<User>>`
+| Service | Port | Responsibility |
+|---------|------|----------------|
+| `api-gateway` | 8080 | Centralized routing, JWT enforcement |
+| `user-service` | 8081 | Signup, Login, JWT issuance |
+| `transaction-service` | 8082 | Create transactions, publish Kafka events |
+| `notification-service` | 8084 | Consume events, send notifications |
+| `reward-service` | 8085 | Consume events, calculate reward points |
+| `wallet-service` | 8090 | Balance management, holds, credits, debits |
 
 ---
 
-## 10. Logging Strategy (JWT Filter)
+## 🛠 Tech Stack
 
-### Logger Used
-
-* SLF4J (`LoggerFactory`)
-
-### Logged Events
-
-* JWT extraction attempt
-* Username extraction success/failure
-* Token validation success/failure
-* Role extraction
-* Authentication setup
-
-Logging levels:
-
-* `debug` → normal auth flow
-* `warn` → invalid token
-* `error` → unexpected failures
+| Category | Technology |
+|----------|-----------|
+| Language | Java 17 |
+| Framework | Spring Boot 3.x |
+| API Gateway | Spring Cloud Gateway (WebFlux) |
+| Messaging | Apache Kafka + Zookeeper |
+| Auth | JWT (Stateless) |
+| Security | Spring Security |
+| Database | H2 (In-Memory) |
+| ORM | Spring Data JPA / Hibernate |
+| Containerization | Docker + Docker Compose |
+| Build Tool | Maven |
 
 ---
 
-## 11. Security Context Understanding
+## 🚀 Getting Started
 
-Once authentication is set:
+### Prerequisites
 
-```java
-SecurityContextHolder.getContext().setAuthentication(authToken);
+- [Docker Desktop](https://www.docker.com/products/docker-desktop/) installed and running
+- Java 17+ (only needed for local development without Docker)
+
+### Run with Docker (Recommended)
+
+```bash
+# 1. Clone the repository
+git clone https://github.com/yourusername/FinTech-Payment-Backend.git
+cd FinTech-Payment-Backend
+
+# 2. Start all services with a single command
+docker-compose up -d --build
+
+# 3. Verify all services are running
+docker-compose ps
 ```
 
-Then:
+All 8 containers (Zookeeper, Kafka + 6 microservices) will start automatically.
 
-* Controllers trust the user is authenticated
-* Role-based access can be applied later
+### Useful Commands
 
----
+```bash
+# Stop all services
+docker-compose down
 
-## 12. What We Have NOW
+# View logs of all services
+docker-compose logs -f
 
-✅ RESTful controllers
-✅ Proper HTTP semantics
-✅ Service abstraction
-✅ Spring Security configured
-✅ JWT filter implemented
-✅ Logging in place
+# View logs of a specific service
+docker-compose logs -f user-service
 
-This is a **solid backend foundation**.
-
----
-
-## 13. Next Step (Tomorrow)
-
-### DTO Implementation
-
-We will:
-
-* Introduce UserRequestDTO / UserResponseDTO
-* Remove Entity exposure from API
-* Add validation annotations
-* Map DTO ↔ Entity
-
-This will make the API:
-
-* Safer
-* Cleaner
-* Production-ready
+# Restart a specific service
+docker-compose restart transaction-service
+```
 
 ---
 
-## ✅ JWT + DTO IMPLEMENTATION (COMPLETED)
+## 📡 API Reference
 
-### 🔐 Authentication Flow
+All requests go through the **API Gateway at `http://localhost:8080`**
 
-* **Signup**
+### Auth (User Service)
 
-  * Uses `SignupRequest` DTO
-  * Checks existing user by email
-  * Password encoding handled in service layer
-  * Default role assigned: `ROLE_USER`
+| Method | Endpoint | Description | Auth Required |
+|--------|----------|-------------|---------------|
+| POST | `/auth/signup` | Register a new user | ❌ |
+| POST | `/auth/login` | Login and receive JWT token | ❌ |
 
-* **Login**
+### Transactions
 
-  * Uses `LoginRequest` DTO
-  * Validates user existence
-  * Validates password using `PasswordEncoder`
-  * Generates JWT token using `JwtUtil`
-  * Returns token via `LoginResponse` DTO
+| Method | Endpoint | Description | Auth Required |
+|--------|----------|-------------|---------------|
+| POST | `/api/transactions` | Create a transaction | ✅ |
+| GET | `/api/transactions` | Get all transactions | ✅ |
 
-### 🧾 DTOs Used
+### Rewards
 
-* `SignupRequest`
-* `LoginRequest`
-* `LoginResponse`
+| Method | Endpoint | Description | Auth Required |
+|--------|----------|-------------|---------------|
+| GET | `/api/rewards` | Get reward points | ✅ |
 
-> DTOs are **NOT injected** as Spring beans. They are created per request to avoid lifecycle and thread-safety issues.
+### Notifications
 
-### 🔑 JWT Details
+| Method | Endpoint | Description | Auth Required |
+|--------|----------|-------------|---------------|
+| GET | `/api/notifications` | Get notifications | ✅ |
 
-* Stateless authentication
-* Token contains:
+### Authentication Header
 
-  * `sub` (email)
-  * `role` (custom claim)
-* Token validated in `JwtRequestFilter`
-* No DB calls in filter (pure JWT-based auth)
-
-### 🛡️ Security Filter
-
-* Custom `JwtRequestFilter` extends `OncePerRequestFilter`
-* Extracts token from `Authorization: Bearer <token>`
-* Validates token using `JwtUtil`
-* Sets `SecurityContext` with role-based authority
-
-### 🚫 Common Pitfalls Avoided
-
-* No DTO injection into services
-* No business logic in controllers
-* No session-based authentication
-* No DB access in security filter
-
-## ✅ Transaction Service + Kafka Producer: Event send from KafkaProducer (COMPLETED)
-
-Transaction Service → Kafka (txn-initiated)
-                          ↓
-                 Notification Service
-Atomic Operations: Uses @Transactional to ensure data consistency between the DB and Kafka.
-
-Event Generation: Publishes a TransactionEvent to the txn-initiated topic upon successful record creation.
-
-
-## ✅ Notification Service + Kafka Listener: Event consumed by KafkaListener (COMPLETED)
-
-* Consumer Group: Scalable via notification-group.
-
-* Deduplication: The service logic is designed to check for existing records to prevent duplicate notifications (At-least-once delivery handling).
-
-Key Patterns Used
-
-* Constructor Injection: For better testability and loose coupling.
-
-* Global Logging: Structured SLF4J logging for JWT filters and Kafka listeners.
-
-### ✅ Reward Service + Kafka Listener: Event Consumed by KafkaListener (COMPLETED)
-
-The Reward Service is fully event-driven and consumes transaction events published by the Transaction Service via Kafka.
-
-#### 🔄 Event Consumption
-
-Topic: txn-initiated
-
-Consumer Group: reward-group
-
-Listener: @KafkaListener
-
-Auto Offset Reset: earliest
-
-JSON Deserialization using Spring Kafka JsonDeserializer
-
-The service listens for transaction events and processes only SUCCESS transactions.
-
-#### 🎯 Reward Processing Logic
-
-When a transaction event is received:
-
-Validate transaction status (SUCCESS only).
-
-Perform idempotency check using transactionId.
-
-Calculate reward points (percentage-based logic).
-
-Persist reward record in database.
-
-Log structured success/failure events.
-
-#### 🛡 Idempotency Handling (At-Least-Once Safe)
-
-Kafka guarantees at-least-once delivery, meaning events may be redelivered.
-
-To prevent duplicate rewards:
-
-Application-level check:
-
-existsByTransactionId(transactionId)
-
-Database-level protection:
-
-@Column(unique = true) on transaction_id
-
-Unique constraint at table level
-
-This implements the Idempotent Consumer Pattern, ensuring safe retry handling.
-
-Logging via LoggerFactory(Slf4j)
-
-Database indexing for performance (user_id, transaction_id)
-
-🔐 Separation of Concerns
-Layer	Responsibility
-Kafka Listener	Event consumption only
-Service Layer	Business logic (reward calculation + idempotency)
-Repository	Persistence operations
-Entity	Database mapping
-Controller Layer: Exposed simple endpoints
-
-No business logic inside Kafka listener.
-
-#### 📊 Reward Calculation Strategy
-
-Current implementation:
-
-Percentage-based reward (e.g., 2% of transaction amount)
-
-Designed to be easily extendable to:
-
-Tier-based rewards
-
-Campaign-based bonuses
-
-Dynamic rule engine
-
-Configurable reward slabs
-
-## ✅ API Gateway (COMPLETED)
-
-The API Gateway is fully implemented and serves as the single entry point for all backend services.
-
-### 🚪 Gateway Responsibilities
-
-- Centralized routing to all microservices:
-  - `/auth/**` → User Service
-  - `/api/transactions/**` → Transaction Service
-  - `/api/rewards/**` → Reward Service
-  - `/api/notifications/**` → Notification Service
-
-- JWT validation at gateway level
-- Stateless request forwarding
-- Reactive architecture using Spring Cloud Gateway
-- Centralized cross-cutting concerns (authentication, logging, filters)
+```
+Authorization: Bearer <your-jwt-token>
+```
 
 ---
 
-### 🔐 Security at Gateway
+## 🧠 Key Design Patterns
 
-- Custom JWT validation filter implemented
-- Extracts token from: Authorization: Bearer <token>
-- Validates token using shared `JwtUtil`
-- Rejects unauthorized requests before reaching services
-- No session usage (fully stateless)
+### 🔐 JWT Authentication (Stateless)
+- Token issued on login containing `sub` (email) and `role`
+- Validated at Gateway level — no session, no DB lookup in filter
+- All downstream services trust forwarded requests
 
----
+### 📨 Event-Driven Architecture (Kafka)
+```
+Transaction Created → txn-initiated topic → Notification Service
+                                          → Reward Service
+```
+- Producer: `transaction-service`
+- Consumers: `notification-service` (group: `notification-group`), `reward-service` (group: `reward-group`)
 
-### ⚙️ Architecture Decisions
+### 🔒 Pessimistic Locking (Wallet)
+- `@Lock(LockModeType.PESSIMISTIC_WRITE)` on all balance mutations
+- Prevents race conditions and double spending
+- Atomic debit/credit operations
 
-- Reactive (WebFlux-based)
-- No business logic in gateway
-- No database interaction
-- Pure routing + security enforcement
-- Microservices remain independently deployable
+### 🔁 Idempotency (Reward & Notification)
+- Kafka guarantees at-least-once delivery
+- Application-level check: `existsByTransactionId()`
+- DB-level: `@Column(unique = true)` on `transaction_id`
+- Implements the **Idempotent Consumer Pattern**
 
----
-
-### 🧠 Design Principles Followed
-
-| Layer        | Responsibility              |
-|-------------|-----------------------------|
-| Gateway     | Routing + Security Enforcement |
-| Microservices | Business Logic |
-| Kafka       | Event Communication |
-| Database    | Persistence |
-| JWT         | Stateless Authentication |
-
----
-
-# ✅ Wallet Service (COMPLETED)
-
-The Wallet Service is responsible for maintaining **user wallet balances**, handling **debits, credits, holds, captures, and releases** with strong consistency guarantees.
-
-It is designed using **banking-grade concurrency control** and **idempotent financial operations**.
+### 💰 Hold–Capture–Release (Wallet)
+```
+Hold Funds → (success) → Capture Hold → Finalized Debit
+           → (failure) → Release Hold → Funds Returned
+```
+- Unique `holdReference` per hold
+- Auto-expiry via `@Scheduled` cleanup job
 
 ---
 
-## 🏗 Core Responsibilities
+## 📁 Project Structure
 
-- Wallet creation per user
-- Credit / Debit operations
-- Temporary fund holds
-- Capture of held funds
-- Automatic hold expiry via scheduler
-- Concurrency-safe balance updates
-- Exception handling for insufficient funds and invalid operations
-
----
-
-## 🔐 Concurrency Control – Pessimistic Locking
-
-To prevent race conditions during concurrent balance updates:
-
-- Implemented **Pessimistic Locking**
-- Used `@Lock(LockModeType.PESSIMISTIC_WRITE)`
-- Ensures only one transaction modifies wallet balance at a time
-
-### Guarantees
-
-- No double spending
-- No negative balance due to race conditions
-- Strong transactional consistency
-
-This mirrors real-world fintech wallet systems.
-
----
-
-## 💰 Wallet Operations Implemented
-
-### 1️⃣ Create Wallet
-
-- Initializes wallet for user
-- Sets initial balance to zero
-- Enforces unique wallet per user
-
----
-
-### 2️⃣ Credit Wallet
-
-- Adds amount to available balance
-- Fully transactional
-- Uses pessimistic locking
-
----
-
-### 3️⃣ Debit Wallet
-
-- Validates sufficient balance
-- Deducts from available balance
-- Throws `InsufficientFundException` if invalid
-
----
-
-### 4️⃣ Hold Funds
-
-- Deducts amount from available balance
-- Moves amount to "held" state
-- Generates unique `holdReference`
-- Sets expiration timestamp
-- Fully idempotent and transactional
-
-#### Used for:
-- Payment authorization
-- Reserve-before-capture workflows
-
----
-
-### 5️⃣ Capture Hold
-
-- Converts held amount into finalized debit
-- Updates wallet state accordingly
-- Ensures hold exists and is active
-
----
-
-### 6️⃣ Release Hold
-
-- Returns held amount back to available balance
-- Used when payment fails or expires
-
----
-
-## ⏳ Hold Expiry Scheduler
-
-Implemented scheduled cleanup mechanism:
-
-- `@Scheduled` job scans expired holds
-- Automatically releases expired holds
-- Reuses existing release logic
-- Logs success/failure without blocking execution
-
-### Design Considerations
-
-- Does not crash on single failure
-- Continues processing remaining holds
-- Safe for production workloads
-
----
-
-## 🛡 Exception Handling
-
-Custom exceptions implemented:
-
-- `InsufficientFundException`
-- `NotFoundException`
-
-### Global Handling Strategy
-
-- Clear error messages
-- Proper HTTP status codes
-- No internal exception leakage
-
----
-
-## 🔁 Idempotency Strategy
-
-To prevent duplicate financial operations:
-
-- Unique `holdReference`
-- Database constraints
-- Validation before mutation
-- Transactional boundaries
-
-### Ensures
-
-- Safe retries
-- At-least-once safe processing
-- Financial correctness
-
----
-
-## 🧠 Architecture Design
-
-| Layer       | Responsibility                  |
-|------------|----------------------------------|
-| Controller | Request handling only            |
-| Service    | Business logic & locking         |
-| Repository | DB access + locking              |
-| Entity     | DB mapping                       |
-| Scheduler  | Expiry cleanup                   |
-
-- No business logic inside controllers.
-- All balance mutations are transactional.
-
----
-
-## 📊 Data Integrity Guarantees
-
-- ✔ Atomic balance updates  
-- ✔ Concurrency-safe operations  
-- ✔ Hold-expiry auto recovery  
-- ✔ Clear separation of available vs held balance  
-- ✔ Strong financial correctness  
-
----
-
-# 🏁 Project Conclusion
-
-This project represents a **distributed fintech-style payment backend system** built using a microservices architecture.
-
-The system includes:
-
-- ✅ User Service (Authentication & JWT)
-- ✅ Wallet Service (Balance, Hold, Capture, Concurrency Control)
-- ✅ Transaction Service
-- ✅ Notification Service
-- ✅ Reward Service
-- ✅ API Gateway (Routing & Centralized Entry Point)
-- ✅ Idempotency Protection
-- ✅ Scheduled Hold Expiry Handling
-- ✅ Exception Handling & Validation
-- ✅ Pessimistic Locking for Financial Safety
-
----
-
-## 🏗 Architecture Summary
-
-- Built using **Spring Boot Microservices**
-- API Gateway using **Spring Cloud Gateway**
-- Database integration with **JPA/Hibernate**
-- Secure authentication using **JWT**
-- Concurrency-safe financial operations
-- Modular and scalable service design
-- Clean layered architecture (Controller → Service → Repository → Entity)
+```
+FinTech-Payment-Backend/
+├── api-gateway/
+│   ├── src/
+│   ├── pom.xml
+│   └── Dockerfile
+├── user-service/
+│   ├── src/
+│   ├── pom.xml
+│   └── Dockerfile
+├── transaction-service/
+│   ├── src/
+│   ├── pom.xml
+│   └── Dockerfile
+├── notification-service/
+│   ├── src/
+│   ├── pom.xml
+│   └── Dockerfile
+├── reward-service/
+│   ├── src/
+│   ├── pom.xml
+│   └── Dockerfile
+├── wallet-service/
+│   ├── src/
+│   ├── pom.xml
+│   └── Dockerfile
+├── docker-compose.yml
+└── README.md
+```
 
 ---
 
 ## 🔐 Financial Safety Highlights
 
-- Atomic wallet balance updates  
-- Concurrency protection using pessimistic locking  
-- Hold–Capture–Release payment workflow  
-- Idempotent operations to prevent duplicate processing  
-- Scheduled recovery for expired holds  
-
-This ensures the system behaves similarly to real-world digital wallet and payment processing platforms.
-
----
-
-## 🚀 Learning & Engineering Outcomes
-
-Through this project:
-
-- Implemented real-world fintech patterns
-- Designed distributed system communication
-- Handled transactional consistency challenges
-- Applied concurrency control in financial operations
-- Built scalable microservice architecture
+- ✅ Atomic wallet balance updates
+- ✅ Pessimistic locking — no double spending
+- ✅ Hold → Capture → Release workflow
+- ✅ Idempotent Kafka consumers — safe retries
+- ✅ Scheduled recovery for expired holds
+- ✅ Custom exceptions with proper HTTP status codes
 
 ---
 
-## 📌 Final Note
+## 📌 What I Learned
 
-This backend system is structured to serve as a **strong foundation for a production-grade fintech/payment platform like paypal**.  
-
-It demonstrates practical implementation of:
-
-- Microservices architecture  
-- Secure authentication  
-- Distributed routing  
-- Financial transaction handling  
-- Concurrency management  
-
-The system is modular, extensible, and ready for further enhancements such as service discovery, centralized logging, monitoring, and deployment automation.
+- Designing distributed microservice communication with Kafka
+- Implementing stateless JWT auth across a gateway + multiple services
+- Applying pessimistic locking for financial concurrency control
+- Idempotency patterns for at-least-once Kafka delivery
+- Containerizing a multi-service Spring Boot system with Docker Compose
 
 ---
 
-**Project Status: ✅ Completed**
+## 👨‍💻 Author
 
+**Brijesh** — [GitHub](https://github.com/BrijeshPatra) · [LinkedIn](https://www.linkedin.com/in/brijeshpatra/)
 
+---
 
+> ⭐ If you found this project useful, consider giving it a star!
